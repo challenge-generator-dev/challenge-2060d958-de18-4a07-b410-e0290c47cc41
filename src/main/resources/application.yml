@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: payments-service
+  
+  profiles:
+    active: dev
+  
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:payments_db}
+    username: ${DB_USER:payment_user}
+    password: ${DB_PASSWORD:payment_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 30000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+      pool-name: PaymentHikariPool
+  
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob.non_contextual_creation: true
+        
+  retry:
+    max-attempts: 3
+    backoff:
+      initial-interval: 5000
+      max-interval: 10000
+      multiplier: 2.0
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api/payments
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 5s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+        recordExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+    instances:
+      authorizationService:
+        baseConfig: default
+        waitDurationInOpenState: 10s
+  
+  retry:
+    configs:
+      default:
+        maxRetryAttempts: 3
+        waitDuration: 5s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+    instances:
+      authorizationService:
+        baseConfig: default
+
+logging:
+  level:
+    root: INFO
+    com.pragma.payments: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.web: DEBUG
+    org.springframework.retry: DEBUG
+    io.github.resilience4j: DEBUG
+  
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  
+  file:
+    name: ${LOG_FILE:logs/payments-service.log}
+    max-size: 10MB
+    max-history: 7
